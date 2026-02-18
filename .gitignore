@@ -1,0 +1,9 @@
+# Ignore Python environments and cache
+__pycache__/
+venv/
+.env
+.streamlit/
+
+# Ignore audio files if you don't want them in the repo
+*.mp3
+*.wav
