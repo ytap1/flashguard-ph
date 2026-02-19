@@ -30,6 +30,17 @@ mock_environmental_data = {
     }
 }
 
+# 1. ADD THIS NEW MOCK DATA (Right under your existing environmental data)
+mock_social_media_feed = {
+    "Bulacan": [
+        "Twitter User @MarcB Water rising fast sa Bocaue! #RescuePH",
+        "Facebook Group: Stranded sa bubong ang pamilya ko sa Pandi."
+    ],
+    "Marikina": [
+        "Twitter User @TomeandJerry: Marikina river is calm right now. Jogging time!",
+        "Facebook: Traffic is light, no flooding at the bridge."
+    ]
+}
 # ==========================================
 # 1. DEFINE CRISIS TOOLS 
 # ==========================================    
@@ -81,22 +92,49 @@ if "crisis_agent" not in st.session_state:
     directive = """
     You are FlashGuard PH, an elite, autonomous disaster response AI. 
     Your job is to evaluate flood risks and dispatch help.
+
+    SYSTEM DATA:
+    Location: {location}
+    Sensor Data: {env_data}
+    Citizen Reports: {social_data}
+
+    INSTRUCTIONS:
+    1. ANALYZE the 'status' field in the Sensor Data. 
+       - If status is 'NORMAL', confirm that conditions are safe. DO NOT ISSUE ALERTS.
+       - If status is 'CRITICAL', issue a warning.
+    2. CITE your sources. Mention the specific river level and rainfall amount from the data.
+    3. SUMMARIZE the citizen reports to corroborate the sensor data.
     
     CRITICAL PROTOCOL:
     1. If a user asks about a location, you MUST use 'check_pagasa_water_level' AND 'check_social_media_reports' first.
     2. If BOTH sources indicate a flood, you MUST use the 'dispatch_emergency_alert' tool to send help.
     3. Draft a short, multilingual (English/Tagalog) SMS alert in your final response.
     4. Never dispatch resources if the sensors say the area is safe.
+
+    USER QUERY: {user_prompt}
     """
-    
-    st.session_state.crisis_agent = client.chats.create(
-        model="gemini-2.5-flash-lite",
-        config=types.GenerateContentConfig(
-            tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
-            temperature=0.0, # 0.0 means ZERO creativity/hallucination. Strictly factual.
-            system_instruction=directive
+    # Generate response
+    #response = client.models.generate_content(
+    #    model='gemini-2.0-flash', 
+    #    contents=directive
+    #)
+
+    # GENERATE RESPONSE (Using the stable 2.0 model)
+    with st.chat_message("assistant"):
+        response = client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=directive
         )
-    )
+        st.markdown(response.text)
+
+    #st.session_state.crisis_agent = client.chats.create(
+    #    model="gemini-2.5-flash-lite",
+    #    config=types.GenerateContentConfig(
+    #        tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
+    #        temperature=0.0, # 0.0 means ZERO creativity/hallucination. Strictly factual.
+    #        system_instruction=directive
+    #    )
+    #)
 
 # ==========================================
 # 4. CHAT INTERFACE
@@ -113,6 +151,17 @@ for msg in st.session_state.messages:
 # Input box at the bottom of the screen
 if user_prompt := st.chat_input("Enter a crisis report or check a location..."):
     
+    # Detect location from prompt (Simple keyword check)
+    location = "Unknown"
+    if "marikina" in user_prompt.lower():
+        location = "Marikina"
+    elif "bulacan" in user_prompt.lower():
+        location = "Bulacan"
+
+    # Fetch specific data for that location
+    env_data = mock_environmental_data.get(location, "No sensor data available.")
+    social_data = mock_social_media_feed.get(location, ["No recent social media reports."])
+
     # Show user message
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     with st.chat_message("user"):
