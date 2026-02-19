@@ -72,12 +72,12 @@ st.info("System Status: Online. Monitoring PAGASA APIs and Citizen Comms.")
 # ==========================================
 # 3. INITIALIZE THE MASTER AGENT
 # ==========================================
-api_key = os.environ.get("GEMINI_API_KEY", "YOUR_API_KEY_HERE")
+api_key = st.secrets["GEMINI_API_KEY"]
 
 if "crisis_agent" not in st.session_state:
     client = genai.Client(api_key=api_key)
     
-    # 🚨 THE SECRET SAUCE: Strict rules to prevent hallucination 
+    # Strict rules to prevent hallucination 
     directive = """
     You are FlashGuard PH, an elite, autonomous disaster response AI. 
     Your job is to evaluate flood risks and dispatch help.
