@@ -90,7 +90,7 @@ if "crisis_agent" not in st.session_state:
     """
     
     st.session_state.crisis_agent = client.chats.create(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         config=types.GenerateContentConfig(
             tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
             temperature=0.0, # 0.0 means ZERO creativity/hallucination. Strictly factual.
