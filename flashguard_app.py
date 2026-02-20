@@ -6,11 +6,11 @@ DEMO GOAL:
 - Scenario A (Bulacan): CRITICAL sensors => auto-trigger evacuation alert.
 - Scenario B (Marikina): NORMAL sensors => suppress alert (prevent false alarms).
 
-IMPORTANT DEMO NOTE:
-- In the real scenario, the functions below would call real APIs (PAGASA river gauges, rainfall,
+IMPORTANT DEMO NOTE (for viewers/judges):
+- In production, the functions below would call real APIs (PAGASA river gauges, rainfall,
   satellite soil moisture, and social listening like X/Twitter).
 - For hackathon speed + repeatability, we keep a mock "official sensor" dataset.
-- We now ALSO pull LIVE weather + flood proxy data from Open-Meteo (no API key),
+- NEW: We now ALSO pull LIVE weather + flood proxy data from Open-Meteo (no API key),
   and show it as supporting evidence. If live calls fail, the app automatically
   falls back to mock data and continues working offline.
 """
@@ -27,7 +27,7 @@ from google.genai import types
 # ============================================================
 # 0) DEMO DATA (MOCKED "OFFICIAL SENSOR") — used for deterministic decisions
 # ============================================================
-# These values represent what production integration WOULD deliver from:
+# These values represent what your production integration WOULD deliver from:
 # - PAGASA river gauges / rainfall APIs
 # - Satellite soil saturation / cloud cover
 # For hackathon demo purposes, we hardcode them for stability and repeatability.
@@ -338,7 +338,7 @@ def check_pagasa_water_level(location_name: str) -> str:
 
     What is deterministic for demo:
     - MOCK_ENVIRONMENTAL_DATA is the authoritative "sensor truth" that drives dispatch decisions.
-    - This guarantees Bulacan=CRITICAL and Marikina=NORMAL in the demo.
+    - This guarantees Bulacan=CRITICAL and Marikina=NORMAL in your scripted demo.
 
     What is live for credibility:
     - Open-Meteo weather (precipitation)
@@ -654,3 +654,46 @@ FlashGuard PH enforces a **fact-grounded safety gate** before sending evacuation
                 bundle = _get_live_open_meteo_bundle(loc)
 
                 if not bundle.get("ok"):
+                    st.warning(f"Open‑Meteo live fetch unavailable: {bundle.get('reason')}")
+                else:
+                    weather = bundle.get("weather", {})
+                    flood = bundle.get("flood", {})
+
+                    c1, c2 = st.columns(2, gap="large")
+                    with c1:
+                        st.markdown("#### ☔ Weather (Forecast API)")
+                        if weather.get("data_source") == "OPEN_METEO_LIVE":
+                            st.markdown(f"**Current time:** `{weather['current'].get('time')}`")
+                            st.markdown(f"**Temp (°C):** `{weather['current'].get('temperature_2m')}`")
+                            st.markdown(f"**Precip now (mm):** `{weather['current'].get('precipitation')}`")
+                            st.caption("Next hours (preview):")
+                            st.json(weather.get("hourly_preview", {}))
+                        else:
+                            st.warning(f"Weather fetch failed: {weather.get('error', 'unknown error')}")
+
+                    with c2:
+                        st.markdown("#### 🌊 Flood Proxy (River Discharge, GloFAS model)")
+                        if flood.get("data_source") == "OPEN_METEO_LIVE":
+                            st.caption("Next days (preview):")
+                            st.json(flood.get("daily_preview", {}))
+                        else:
+                            st.warning(f"Flood fetch failed: {flood.get('error', 'unknown error')}")
+
+                    st.caption(
+                        "Note: Open‑Meteo Flood API provides modeled discharge estimates (not a local gauge). "
+                        "FlashGuard’s dispatch gate remains grounded in verified sensor truth."
+                    )
+
+        # ------------------------------------------------------------
+        # Optional debug + raw mock dataset views
+        # ------------------------------------------------------------
+        if show_debug:
+            st.session_state.debug_log.append({"prompt": user_prompt, "response": response.text})
+            with st.expander("Debug log"):
+                st.json(st.session_state.debug_log)
+
+        if show_raw:
+            with st.expander("Raw mock sensor dataset (demo only)"):
+                st.json(MOCK_ENVIRONMENTAL_DATA)
+
+    st.session_state.messages.append({"role": "assistant", "content": response.text})
