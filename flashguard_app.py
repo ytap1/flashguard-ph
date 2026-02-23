@@ -482,7 +482,7 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.subheader("🧪 Judge/Debug Views")
+    st.subheader("🧪 Debug Views")
     show_signal_truth = st.checkbox("Show 'Signal vs Truth' card", value=True)
     show_why_no_alert = st.checkbox("Show 'Why no alert?' explanation", value=True)
     show_open_meteo = st.checkbox("Show Open-Meteo live evidence panel", value=True)
@@ -523,7 +523,8 @@ Keep responses factual and concise. No hallucinations.
 """
 
     st.session_state.crisis_agent = client.chats.create(
-        model="gemini-2.5-flash-lite",
+    #    model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
             temperature=0.0,
