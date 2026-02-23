@@ -1,105 +1,97 @@
-🛑 FlashGuard PH — Autonomous Flood Decision System (Hackathon MVP)
-FlashGuard PH is an AI‑native crisis management prototype designed to demonstrate how flood warnings can be issued faster and more safely using autonomous decision logic with built‑in safeguards against false alarms.
-The Philippines is highly disaster‑prone, yet many systems today are data‑heavy but decision‑light. FlashGuard PH focuses on turning signals into decisions, while ensuring those decisions are fact‑grounded and verified.
+﻿@#  FlashGuard PH  Autonomous Flood Decision System (Hackathon MVP)
 
-🎯 What This Demo Shows
-The MVP intentionally demonstrates two contrasting scenarios:
-✅ Scenario A — Bulacan (Critical → Auto‑Dispatch)
+FlashGuard PH is an AInative autonomous crisis management prototype designed to show how flood warnings can be issued faster and more safely using autonomous decision logic with built-in safeguards against false alarms.
 
-Official sensor readings indicate critical spill levels
-Independent adversarial sources confirm severe flooding
-✅ The system automatically triggers an evacuation alert
-No human approval required
+---
 
-✅ Scenario B — Marikina (Normal → Suppress)
+##  Pitch (Wait, what is this?)
 
-Rainfall and citizen reports exist (noise / signal)
-Official sensors remain below critical thresholds
-✅ The system suppresses evacuation alerts
-Prevents false alarms and public panic
+**FlashGuard PH is an autonomous flood-response AI that acts fast when danger is realand proves when its safe not to act.**
 
-These two cases prove that FlashGuard PH can be fast when needed, and cautious when required.
+The Philippines is highly disaster-prone, but many systems today are data-heavy but decision-light. FlashGuard PH focuses on turning signals into decisions, ensuring they are fact-grounded and cross-verified.
 
-🧠 How FlashGuard PH Decides (High‑Level)
-FlashGuard PH uses a multi‑layered decision pipeline:
-1️⃣ Sensor Truth (Primary Gate)
+---
 
+##  Demo Case Studies
+
+The system demonstrates two contrasting scenarios:
+
+ **Scenario A  Bulacan (Critical  Auto-Dispatch)**
+- Official sensor readings indicate critical spill levels.
+- Independent adversarial sources (Nemesis AI) confirm severe flooding.
+- **Outcome:** System automatically triggers an evacuation alert.
+
+ **Scenario B  Marikina (Normal  Suppress)**
+- Rainfall and citizen reports exist (noise / signal).
+- Official sensors remain below critical thresholds.
+- **Outcome:** System suppresses evacuation alerts, preventing false alarms and public panic.
+
+---
+
+##  Core Capabilities & Logic
+
+### 1. Sensor Truth (Primary Gate)
 Uses authoritative flood indicators (mocked for demo):
+- River gauge vs. critical threshold
+- Basin status (NORMAL vs CRITICAL)
+- Rainfall intensity & soil saturation
 
-River gauge vs. critical threshold
-Basin status (NORMAL vs CRITICAL)
+**Rule:** No alert is possible unless sensors hit critical thresholds. This ensures the system is grounded in factual measurements, not social noise.
 
+### 2. Nemesis AI  Adversarial Cross-Check (Safety Gate)
+Before any alert is dispatched, Nemesis AI runs an adversarial validation. It compares primary data against independent sources:
+- Citizen radio
+- LGU drone reconnaissance
+- Rescue request density
 
-No alert is possible unless sensors are critical
+**Rule:** Dispatch is allowed only if BOTH sources agree risk is critical. Conflicting signals result in a **BLOCK** for manual human verification.
 
-This ensures the system is grounded in factual measurements, not social noise.
+### 3. Live Weather & Flood Context (Open-Meteo)
+FlashGuard PH augments its decisions with live data from OpenMeteo:
+-  Rainfall & precipitation forecasts
+-  Modeled river discharge (GloFAS flood proxy)
 
-2️⃣ Nemesis AI — Adversarial Cross‑Check (Safety Gate)
-Every potential dispatch is verified by Nemesis AI, an adversarial validation layer that simulates an independent source such as:
+Live data is used as supporting evidence, not as the final authority, ensuring demo reliability even if live APIs are noisy.
 
-Citizen radio
-LGU drone reconnaissance
-Rescue request density
+### 4. AI Crisis Assistant (Gemini + Tool Calling)
+Uses `gemini-2.5-flash-lite` for intelligent orchestration. Deterministic behavior (`temperature=0.0`) ensures consistent, trustworthy decisions during a crisis.
 
-Rules:
+---
 
-✅ Dispatch allowed only if BOTH sources agree it’s critical
-❌ Dispatch blocked if:
+##  Setup & Run
 
-Sources conflict
-Both indicate low risk
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
+2. **Configure secrets:**
+   Create `.streamlit/secrets.toml` and add:
+   ```toml
+   GEMINI_API_KEY = "your_api_key_here"
+   ```
 
+3. **Run the app:**
+   ```bash
+   streamlit run flashguard_app.py
+   ```
 
-This introduces a “two‑source agreement rule”, similar to safety‑critical systems in aviation and healthcare.
+---
 
-3️⃣ Live Weather & Flood Context (Open‑Meteo)
-FlashGuard PH augments its decisions with live, open data from Open‑Meteo:
+##  Architecture Summary
 
-☔ Rainfall & precipitation forecasts
-🌊 Modeled river discharge (GloFAS flood proxy)
+- **Frontend:** Streamlit chat app
+- **AI Engine:** Gemini via `google-genai`
+- **Integrations:**
+  - Mock Environmental Truth (deterministic)
+  - Nemesis AI Adversarial Logic (safeguard)
+  - OpenMeteo Live APIs (augmentation)
 
+---
 
-Live data is used as supporting evidence, not as the final authority, ensuring:
+##  Notes & Limitations
 
-✅ Demo reliability (works offline)
-✅ No false dispatches due to noisy models
-
-
-
-✅ Why Judges Can Trust This System
-
-Deterministic safety gates prevent hallucinated actions
-Adversarial AI actively blocks unsafe automation
-Transparent explanations show why alerts were sent or suppressed
-Offline‑safe architecture (mock truth + live augmentation)
-No black‑box decisions
-
-FlashGuard PH does not just warn — it decides responsibly.
-
-🚀 Architecture Highlights
-
-Streamlit UI for fast, explainable demos
-Gemini Tool‑Calling for structured AI actions
-Open‑Meteo (free, no API key) for live weather & flood context
-Nemesis AI for adversarial validation
-QA‑enforced dispatch gate (cannot be bypassed by the LLM)
-
-
-🧪 Hackathon Scope Disclaimer
-This MVP uses mocked sensor data for:
-
-Repeatable demos
-Offline reliability
-Deterministic behavior
-
-In production, FlashGuard PH is designed to integrate directly with:
-
-PAGASA river gauges & rainfall feeds
-Project NOAH hazard layers
-LGU and national emergency systems
-
-
-✅ In One Sentence (Pitch‑Ready)
-
-FlashGuard PH is an autonomous flood‑response AI that acts fast when danger is real—and proves when it’s safe not to act.
+- External integrations are currently hybrid (mocked sensors + live Open-Meteo).
+- Dispatch is simulated for prototype/demo use.
+- Production versions should add live national hydrology feeds (PAGASA, Project NOAH) and secure SMS/LGU dispatch gateways.
+@
