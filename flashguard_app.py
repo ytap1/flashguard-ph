@@ -58,6 +58,28 @@ MOCK_ENVIRONMENTAL_DATA: Dict[str, Dict[str, Any]] = {
         "status": "NORMAL",
         "data_source": "MOCK_OFFICIAL_SENSOR",
     },
+    "Bulacan_Low": {
+        "timestamp": "2026-02-18T20:30:00Z",
+        "river_basin": "Angat River System",
+        "river_gauge_meters": 10.0,
+        "critical_threshold_meters": 15.0,
+        "rainfall_mm_per_hr": 5.0,
+        "satellite_soil_saturation": "40%",
+        "satellite_cloud_cover": "Light",
+        "status": "NORMAL",
+        "data_source": "MOCK_OFFICIAL_SENSOR",
+    },
+    "Marikina_Low": {
+        "timestamp": "2026-02-18T20:30:00Z",
+        "river_basin": "Marikina River Basin",
+        "river_gauge_meters": 8.0,
+        "critical_threshold_meters": 15.0,
+        "rainfall_mm_per_hr": 2.0,
+        "satellite_soil_saturation": "30%",
+        "satellite_cloud_cover": "Clear",
+        "status": "NORMAL",
+        "data_source": "MOCK_OFFICIAL_SENSOR",
+    },
 }
 
 # ============================================================
@@ -74,6 +96,7 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
         "rescue_requests_count": 7,
         "confidence": "HIGH",
         "data_source": "MOCK_ADVERSARIAL",
+        "priority": 2,
     },
     "Marikina": {
         "timestamp": "2026-02-18T20:31:00Z",
@@ -83,6 +106,27 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
         "rescue_requests_count": 0,
         "confidence": "MEDIUM",
         "data_source": "MOCK_ADVERSARIAL",
+        "priority": 5,
+    },
+    "Bulacan_Low": {
+        "timestamp": "2026-02-18T20:31:00Z",
+        "alt_source": "Satellite Feed (Secondary)",
+        "alt_flood_status": "LOW_RISK",
+        "estimated_inundation_meters": 0.0,
+        "rescue_requests_count": 0,
+        "confidence": "LOW",
+        "data_source": "MOCK_ADVERSARIAL",
+        "priority": 5,
+    },
+    "Marikina_Low": {
+        "timestamp": "2026-02-18T20:31:00Z",
+        "alt_source": "Satellite Feed (Secondary)",
+        "alt_flood_status": "LOW_RISK",
+        "estimated_inundation_meters": 0.0,
+        "rescue_requests_count": 0,
+        "confidence": "LOW",
+        "data_source": "MOCK_ADVERSARIAL",
+        "priority": 5,
     },
 }
 
@@ -93,6 +137,8 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
 LOCATION_COORDS: Dict[str, Tuple[float, float]] = {
     "Bulacan": (14.85, 120.81),
     "Marikina": (14.65, 121.10),
+    "Bulacan_Low": (14.85, 120.81),
+    "Marikina_Low": (14.65, 121.10),
 }
 
 
@@ -111,17 +157,16 @@ def _infer_location_from_text(input_text: str) -> str:
     """
     if not input_text:
         return input_text
-    text = input_text.lower()
+    text = input_text.strip().lower()
 
-    for known_location in MOCK_ENVIRONMENTAL_DATA.keys():
-        if known_location.lower() in text:
-            return known_location
+    # Sort keys by length descending to match more specific names first (e.g., "Bulacan_Low" before "Bulacan")
+    sorted_locations = sorted(
+        set(list(MOCK_ENVIRONMENTAL_DATA.keys()) + list(ADVERSARIAL_MOCK_DATA.keys()) + list(LOCATION_COORDS.keys())),
+        key=len,
+        reverse=True,
+    )
 
-    for known_location in ADVERSARIAL_MOCK_DATA.keys():
-        if known_location.lower() in text:
-            return known_location
-
-    for known_location in LOCATION_COORDS.keys():
+    for known_location in sorted_locations:
         if known_location.lower() in text:
             return known_location
 
@@ -289,6 +334,7 @@ def nemesis_ai(location_name: str) -> str:
                 "location": location_name,
                 "decision": "BLOCK",
                 "reason": "No reliable data in either source.",
+                "priority": 5,
                 "used_sources": ["MOCK_ENVIRONMENTAL_DATA", "ADVERSARIAL_MOCK_DATA"],
             },
             ensure_ascii=False,
@@ -312,9 +358,14 @@ def nemesis_ai(location_name: str) -> str:
             or int(adversarial.get("rescue_requests_count", 0) or 0) >= 2
         )
 
+    # Base priority from adversarial mock data (default 5 if missing)
+    priority = adversarial.get("priority", 5) if adversarial else 5
+
     if primary_is_critical and adversarial_is_critical:
         decision = "APPROVE"
         reason = "Both primary and adversarial sources indicate flood danger."
+        # If approved, force highest priority as per demo requirement
+        priority = 1
     elif primary_is_critical != adversarial_is_critical:
         decision = "BLOCK"
         reason = "Sources conflict. Escalate for human verification before dispatch."
@@ -327,6 +378,7 @@ def nemesis_ai(location_name: str) -> str:
             "location": location_name,
             "decision": decision,
             "reason": reason,
+            "priority": priority,
             "primary_is_critical": primary_is_critical,
             "adversarial_is_critical": adversarial_is_critical,
             "used_sources": ["MOCK_ENVIRONMENTAL_DATA", "ADVERSARIAL_MOCK_DATA"],
@@ -492,29 +544,41 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
 
     # Gate 2: adversarial cross-check (Nemesis AI)
     adversarial_verdict = json.loads(nemesis_ai(location_key))
+    priority_level = adversarial_verdict.get("priority", 5)
+
     if adversarial_verdict.get("decision") != "APPROVE":
-        st.toast(f"🛑 ALERT BLOCKED: Nemesis AI flagged {location_key} for manual verification.")
+        st.toast(f"🛑 ALERT BLOCKED: Nemesis AI flagged {location_key} for manual verification. (Priority: {priority_level})")
         return _standard_tool_response(
             ok=False,
             payload={
                 "area": location_key,
                 "reason": adversarial_verdict.get("reason", "Nemesis AI blocked dispatch."),
                 "nemesis_decision": adversarial_verdict.get("decision", "BLOCK"),
+                "priority": priority_level,
             },
-            message="SAFETY BLOCK: Nemesis AI blocked auto-dispatch.",
+            message=f"SAFETY BLOCK: Nemesis AI blocked auto-dispatch. (Priority: {priority_level})",
         )
 
     # Dispatch allowed
-    st.toast(f"🚨 ACTION TRIGGERED: Dispatching units to {location_key}!")
+    if priority_level == 1:
+        st.toast(f"🔥 URGENT DISPATCH: High Priority resources deployed to {location_key}!")
+    else:
+        st.toast(f"🚨 ACTION TRIGGERED: Dispatching units to {location_key}! (Priority: {priority_level})")
+
+    dispatch_message = "Evacuation SMS broadcasted + resources coordinated (mock)."
+    if priority_level == 1:
+        dispatch_message = f"🚨 HIGH PRIORITY: {dispatch_message}"
+
     return _standard_tool_response(
         ok=True,
         payload={
             "area": location_key,
             "action_plan": action_plan,
-            "dispatch": "Evacuation SMS broadcasted + resources coordinated (mock).",
+            "dispatch": dispatch_message,
+            "priority": priority_level,
             "nemesis_decision": adversarial_verdict.get("decision", "APPROVE"),
         },
-        message="SUCCESS: Evacuation alert dispatched.",
+        message=f"SUCCESS: Evacuation alert dispatched. Priority level: {priority_level}.",
     )
 
 
@@ -554,6 +618,16 @@ with st.sidebar:
         st.session_state["_demo_prompt"] = "Check flood status in Marikina."
         _update_status_context("Marikina")
 
+    st.divider()
+    st.caption("New Low Priority Cases:")
+    if st.button("Case C: Bulacan Low (Low Priority)"):
+        st.session_state["_demo_prompt"] = "Check flood status in Bulacan_Low."
+        _update_status_context("Bulacan_Low")
+    if st.button("Case D: Marikina Low (Low Priority)"):
+        st.session_state["_demo_prompt"] = "Check flood status in Marikina_Low."
+        _update_status_context("Marikina_Low")
+
+    st.divider()
     if st.button("Reset Demo"):
         st.session_state.pop("messages", None)
         st.session_state.pop("debug_log", None)
