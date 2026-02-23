@@ -58,26 +58,37 @@ MOCK_ENVIRONMENTAL_DATA: Dict[str, Dict[str, Any]] = {
         "status": "NORMAL",
         "data_source": "MOCK_OFFICIAL_SENSOR",
     },
-    "Bulacan_Low": {
+    "San Lorenzo": {
         "timestamp": "2026-02-18T20:30:00Z",
-        "river_basin": "Angat River System",
-        "river_gauge_meters": 10.0,
+        "river_basin": "Pasig River Basin",
+        "river_gauge_meters": 8.0,
         "critical_threshold_meters": 15.0,
-        "rainfall_mm_per_hr": 5.0,
-        "satellite_soil_saturation": "40%",
-        "satellite_cloud_cover": "Light",
+        "rainfall_mm_per_hr": 1.0,
+        "satellite_soil_saturation": "25%",
+        "satellite_cloud_cover": "Clear",
         "status": "NORMAL",
         "data_source": "MOCK_OFFICIAL_SENSOR",
     },
-    "Marikina_Low": {
+    "East Pembo": {
         "timestamp": "2026-02-18T20:30:00Z",
-        "river_basin": "Marikina River Basin",
-        "river_gauge_meters": 8.0,
+        "river_basin": "Pasig River Basin",
+        "river_gauge_meters": 9.0,
         "critical_threshold_meters": 15.0,
         "rainfall_mm_per_hr": 2.0,
         "satellite_soil_saturation": "30%",
         "satellite_cloud_cover": "Clear",
         "status": "NORMAL",
+        "data_source": "MOCK_OFFICIAL_SENSOR",
+    },
+    "Manila": {
+        "timestamp": "2026-02-18T20:30:00Z",
+        "river_basin": "Manila Bay Area",
+        "river_gauge_meters": 16.5,
+        "critical_threshold_meters": 15.0,
+        "rainfall_mm_per_hr": 38.0,
+        "satellite_soil_saturation": "90%",
+        "satellite_cloud_cover": "Heavy Nimbus",
+        "status": "CRITICAL_SPILL_LEVEL",
         "data_source": "MOCK_OFFICIAL_SENSOR",
     },
 }
@@ -108,9 +119,19 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
         "data_source": "MOCK_ADVERSARIAL",
         "priority": 5,
     },
-    "Bulacan_Low": {
+    "San Lorenzo": {
         "timestamp": "2026-02-18T20:31:00Z",
-        "alt_source": "Satellite Feed (Secondary)",
+        "alt_source": "LGU Monitoring",
+        "alt_flood_status": "LOW_RISK",
+        "estimated_inundation_meters": 0.0,
+        "rescue_requests_count": 0,
+        "confidence": "MEDIUM",
+        "data_source": "MOCK_ADVERSARIAL",
+        "priority": 5,
+    },
+    "East Pembo": {
+        "timestamp": "2026-02-18T20:31:00Z",
+        "alt_source": "Satellite Feed",
         "alt_flood_status": "LOW_RISK",
         "estimated_inundation_meters": 0.0,
         "rescue_requests_count": 0,
@@ -118,15 +139,15 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
         "data_source": "MOCK_ADVERSARIAL",
         "priority": 5,
     },
-    "Marikina_Low": {
+    "Manila": {
         "timestamp": "2026-02-18T20:31:00Z",
-        "alt_source": "Satellite Feed (Secondary)",
-        "alt_flood_status": "LOW_RISK",
-        "estimated_inundation_meters": 0.0,
-        "rescue_requests_count": 0,
-        "confidence": "LOW",
+        "alt_source": "Barangay Hotlines",
+        "alt_flood_status": "CRITICAL",
+        "estimated_inundation_meters": 1.1,
+        "rescue_requests_count": 12,
+        "confidence": "HIGH",
         "data_source": "MOCK_ADVERSARIAL",
-        "priority": 5,
+        "priority": 1,
     },
 }
 
@@ -137,14 +158,24 @@ ADVERSARIAL_MOCK_DATA: Dict[str, Dict[str, Any]] = {
 LOCATION_COORDS: Dict[str, Tuple[float, float]] = {
     "Bulacan": (14.85, 120.81),
     "Marikina": (14.65, 121.10),
-    "Bulacan_Low": (14.85, 120.81),
-    "Marikina_Low": (14.65, 121.10),
+    "San Lorenzo": (14.55, 121.03),
+    "East Pembo": (14.56, 121.05),
+    "Manila": (14.59, 120.98),
 }
 
 
 # ============================================================
 # 1) Helper Logic — deterministic + demo-safe
 # ============================================================
+def _safe_toast(message: str, icon: str = None) -> None:
+    """Safely call st.toast even if called from a non-main thread during tool execution."""
+    try:
+        st.toast(message, icon=icon)
+    except Exception:
+        # Ignore if streamlit context is not available during tool call
+        pass
+
+
 def _standard_tool_response(ok: bool, payload: Dict[str, Any], message: str) -> str:
     """All tools return a consistent JSON envelope for robust tool-calling."""
     return json.dumps({"ok": ok, "message": message, "payload": payload}, ensure_ascii=False)
@@ -323,7 +354,7 @@ def nemesis_ai(location_name: str) -> str:
     - blocks dispatch if sources conflict or both indicate low risk
     - approves only when BOTH indicate danger
     """
-    st.toast(f"🛡️ Nemesis AI: Running adversarial cross-check for {location_name}...")
+    _safe_toast(f"🛡️ Nemesis AI: Running adversarial cross-check for {location_name}...")
 
     primary = MOCK_ENVIRONMENTAL_DATA.get(location_name)
     adversarial = ADVERSARIAL_MOCK_DATA.get(location_name)
@@ -477,7 +508,7 @@ def check_pagasa_water_level(location_name: str) -> str:
     - Added augmentation: Open-Meteo weather + flood proxy (best-effort)
     - Added transparency: includes adversarial record for context
     """
-    st.toast(f"📡 System: Checking sensor feeds for {location_name}...")
+    _safe_toast(f"📡 System: Checking sensor feeds for {location_name}...")
 
     location_key = _infer_location_from_text(location_name)
 
@@ -485,7 +516,7 @@ def check_pagasa_water_level(location_name: str) -> str:
     adversarial = ADVERSARIAL_MOCK_DATA.get(location_key)
 
     # Best-effort live evidence (does NOT override sensor gate)
-    st.toast(f"🌐 System: Pulling Open‑Meteo live signals for {location_key}...")
+    _safe_toast(f"🌐 System: Pulling Open‑Meteo live signals for {location_key}...")
     open_meteo_bundle = _get_open_meteo_bundle(location_key)
 
     if sensor_truth:
@@ -503,15 +534,16 @@ def check_pagasa_water_level(location_name: str) -> str:
         "open_meteo": open_meteo_bundle,
         "data_source": "OPEN_METEO(best-effort) + ADVERSARIAL(mock)",
     }
-    ok = bool(adversarial) or bool(open_meteo_bundle.get("ok"))
-    return _standard_tool_response(ok, payload, "No mock sensor truth found; returning available sources.")
+    # Fix: Always return ok=True if the lookup happened successfully, 
+    # even if no sensor data was found, to prevent LLM from reporting a system "error".
+    return _standard_tool_response(True, payload, "Looked for sensor data; none found in mock set, showing other sources.")
 
 
 def check_social_media_reports(area_name: str) -> str:
     """
     Tool: Citizen signal reports (mock).
     """
-    st.toast(f"📱 System: Scanning citizen reports for {area_name}...")
+    _safe_toast(f"📱 System: Scanning citizen reports for {area_name}...")
     reports = _mock_social_reports(area_name)
     if reports["verified_reports_count"] > 0:
         return _standard_tool_response(True, reports, "Citizen reports detected (mock).")
@@ -525,7 +557,7 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
     1) Sensor gate (must be critical)
     2) Nemesis AI gate (must be APPROVE; blocks if conflict/low-risk)
     """
-    st.toast(f"🚨 ACTION: Validating before dispatch to {area_name}...")
+    _safe_toast(f"🚨 ACTION: Validating before dispatch to {area_name}...")
 
     location_key = _infer_location_from_text(area_name)
     sensor_record = MOCK_ENVIRONMENTAL_DATA.get(location_key, {})
@@ -547,7 +579,7 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
     priority_level = adversarial_verdict.get("priority", 5)
 
     if adversarial_verdict.get("decision") != "APPROVE":
-        st.toast(f"🛑 ALERT BLOCKED: Nemesis AI flagged {location_key} for manual verification. (Priority: {priority_level})")
+        _safe_toast(f"🛑 ALERT BLOCKED: Nemesis AI flagged {location_key} for manual verification. (Priority: {priority_level})")
         return _standard_tool_response(
             ok=False,
             payload={
@@ -561,9 +593,9 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
 
     # Dispatch allowed
     if priority_level == 1:
-        st.toast(f"🔥 URGENT DISPATCH: High Priority resources deployed to {location_key}!")
+        _safe_toast(f"🔥 URGENT DISPATCH: High Priority resources deployed to {location_key}!")
     else:
-        st.toast(f"🚨 ACTION TRIGGERED: Dispatching units to {location_key}! (Priority: {priority_level})")
+        _safe_toast(f"🚨 ACTION TRIGGERED: Dispatching units to {location_key}! (Priority: {priority_level})")
 
     dispatch_message = "Evacuation SMS broadcasted + resources coordinated (mock)."
     if priority_level == 1:
@@ -619,13 +651,18 @@ with st.sidebar:
         _update_status_context("Marikina")
 
     st.divider()
-    st.caption("New Low Priority Cases:")
-    if st.button("Case C: Bulacan Low (Low Priority)"):
-        st.session_state["_demo_prompt"] = "Check flood status in Bulacan_Low."
-        _update_status_context("Bulacan_Low")
-    if st.button("Case D: Marikina Low (Low Priority)"):
-        st.session_state["_demo_prompt"] = "Check flood status in Marikina_Low."
-        _update_status_context("Marikina_Low")
+    st.caption("New Scenarios:")
+    if st.button("Case C: Manila (Critical → Dispatch)"):
+        st.session_state["_demo_prompt"] = "Check flood status in Manila."
+        _update_status_context("Manila")
+
+    if st.button("Case D: San Lorenzo (Normal)"):
+        st.session_state["_demo_prompt"] = "Check flood status in San Lorenzo."
+        _update_status_context("San Lorenzo")
+    
+    if st.button("Case E: East Pembo (Normal)"):
+        st.session_state["_demo_prompt"] = "Check flood status in East Pembo."
+        _update_status_context("East Pembo")
 
     st.divider()
     if st.button("Reset Demo"):
@@ -731,8 +768,13 @@ if user_prompt:
     # Ask agent (tool-calling)
     with st.chat_message("assistant"):
         with st.spinner("Analyzing risk data..."):
-            response = st.session_state.crisis_agent.send_message(user_prompt)
-            st.markdown(response.text)
+            try:
+                response = st.session_state.crisis_agent.send_message(user_prompt)
+                assistant_text = response.text or "I have processed the data but have no additional text to display."
+            except Exception as e:
+                assistant_text = f"🚨 ERROR: The crisis agent encountered a logic issue: {str(e)}"
+            
+            st.markdown(assistant_text)
 
         # --- Signal vs Truth card (side-by-side) ---
         if show_signal_truth and loc in MOCK_ENVIRONMENTAL_DATA:
@@ -851,7 +893,7 @@ Sensor truth is **critical**, but **Nemesis AI blocked auto-dispatch**:
 
         # --- Debug / raw ---
         if show_debug:
-            st.session_state.debug_log.append({"prompt": user_prompt, "response": response.text})
+            st.session_state.debug_log.append({"prompt": user_prompt, "response": assistant_text})
             with st.expander("Debug log"):
                 st.json(st.session_state.debug_log)
 
@@ -863,4 +905,4 @@ Sensor truth is **critical**, but **Nemesis AI blocked auto-dispatch**:
                 st.json(ADVERSARIAL_MOCK_DATA)
 
     # Save assistant response (no trailing comma bug)
-    st.session_state.messages.append({"role": "assistant", "content": response.text})
+    st.session_state.messages.append({"role": "assistant", "content": assistant_text})
