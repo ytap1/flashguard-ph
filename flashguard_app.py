@@ -31,20 +31,21 @@ from google.genai import types
 # - PAGASA river gauges / rainfall APIs
 # - Satellite soil saturation / cloud cover
 # For hackathon demo purposes, we hardcode them for stability and repeatability.
+# Assumption: Official sensor feeds are operational and internally consistent.
 MOCK_ENVIRONMENTAL_DATA: Dict[str, Dict[str, Any]] = {
     "Bulacan": {
-        "timestamp": "2026-02-18T20:30:00Z",
-        "river_basin": "Angat River System",
+        "timestamp": "2026-02-25T20:30:00Z",
+        "river_basin": "Angat River",
         "river_gauge_meters": 18.5,
         "critical_threshold_meters": 15.0,
         "rainfall_mm_per_hr": 45.2,
         "satellite_soil_saturation": "94%",
         "satellite_cloud_cover": "Heavy Nimbus",
         "status": "CRITICAL_SPILL_LEVEL",
-        "data_source": "MOCK_OFFICIAL_SENSOR",
+        "data_source": "PAGASA_MOCK_OFFICIAL_SENSOR",
     },
     "Marikina": {
-        "timestamp": "2026-02-18T20:30:00Z",
+        "timestamp": "2026-02-25T20:30:00Z",
         "river_basin": "Marikina River Basin",
         "river_gauge_meters": 12.1,
         "critical_threshold_meters": 15.0,
@@ -52,7 +53,29 @@ MOCK_ENVIRONMENTAL_DATA: Dict[str, Dict[str, Any]] = {
         "satellite_soil_saturation": "60%",
         "satellite_cloud_cover": "Moderate",
         "status": "NORMAL",
-        "data_source": "MOCK_OFFICIAL_SENSOR",
+        "data_source": "PAGASA_MOCK_OFFICIAL_SENSOR",
+    },
+    "Rizal": {
+        "timestamp": "2026-02-25T20:30:00Z",
+        "river_basin": "San Mateo",
+        "river_gauge_meters": 17.1,
+        "critical_threshold_meters": 18.0,
+        "rainfall_mm_per_hr": 10.5,
+        "satellite_soil_saturation": "60%",
+        "satellite_cloud_cover": "Moderate",
+        "status": "NORMAL",
+        "data_source": "NOAH_MOCK_OFFICIAL_SENSOR",
+    },
+    "Pasig": {
+        "timestamp": "2026-02-25T20:30:00Z",
+        "river_basin": "Napindan",
+        "river_gauge_meters": 13.6,
+        "critical_threshold_meters": 13.5,
+        "rainfall_mm_per_hr": 1.5,
+        "satellite_soil_saturation": "78%",
+        "satellite_cloud_cover": "Moderate",
+        "status": "",
+        "data_source": "MMDA_MOCK_OFFICIAL_SENSOR",
     },
 }
 
@@ -61,6 +84,8 @@ MOCK_ENVIRONMENTAL_DATA: Dict[str, Dict[str, Any]] = {
 LOCATION_COORDS: Dict[str, Tuple[float, float]] = {
     "Bulacan": (14.85, 120.81),
     "Marikina": (14.65, 121.10),
+    "Rizal": (14.60, 121.30),
+    "Pasig": (14.56, 121.07),
 }
 
 
@@ -285,7 +310,7 @@ def _render_status_bar() -> None:
         "READY":   {"bg": "#1565C0", "fg": "#FFFFFF", "icon": "🟦", "label": "READY"},
         "UNKNOWN": {"bg": "#455A64", "fg": "#FFFFFF", "icon": "⬛", "label": "UNKNOWN LOCATION"},
         "NORMAL":  {"bg": "#1B5E20", "fg": "#FFFFFF", "icon": "🟩", "label": "NORMAL (NO ALERT)"},
-        "CRITICAL":{"bg": "#B71C1C", "fg": "#FFFFFF", "icon": "🟥", "label": "CRITICAL (DISPATCH)"},
+        "CRITICAL":{"bg": "#B71C1C", "fg": "#FFFFFF", "icon": "🟥", "label": "CRITICAL "},
     }
     style = palette.get(decision, palette["READY"])
 
@@ -408,24 +433,52 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
     """
     Tool: Dispatch (mocked).
 
-    QA SAFETY IMPROVEMENT:
-    - This tool re-checks SENSOR TRUTH BEFORE dispatching.
-    - Even if the AI tries to dispatch incorrectly, the tool refuses unless critical.
+    QA SAFETY GATE (Deterministic):
+    - Re-checks SENSOR TRUTH before dispatching.
+    - Blocks dispatch if sensors are NORMAL.
+    - Blocks dispatch if sensor readings are conflicting
+      (e.g., river gauge >= critical threshold but status is NORMAL).
     """
+
     st.toast(f"🚨 ACTION: Validating before dispatch to {area_name}...")
 
     sensor_record = MOCK_ENVIRONMENTAL_DATA.get(area_name, {})
+
+    status = sensor_record.get("status", "UNKNOWN")
+    gauge = sensor_record.get("river_gauge_meters", 0)
+    threshold = sensor_record.get("critical_threshold_meters", float("inf"))
+
+    # ✅ Safety Gate 1: Sensor conflict
+    if status == "NORMAL" and gauge >= threshold:
+        return _standard_tool_response(
+            ok=False,
+            payload={
+                "area": area_name,
+                "reason": (
+                    "Dispatch blocked: conflicting sensor readings detected. "
+                    "River gauge exceeds critical threshold but status is NORMAL."
+                ),
+                "sensor_status": status,
+                "river_gauge": gauge,
+                "critical_threshold": threshold,
+                "requires_manual_verification": True,
+            },
+            message="SAFETY BLOCK: Manual verification required due to sensor conflict.",
+        )
+
+    # ✅ Safety Gate 2: Not critical
     if not _is_sensor_critical(sensor_record):
         return _standard_tool_response(
             ok=False,
             payload={
                 "area": area_name,
                 "reason": "Dispatch blocked: sensors are not critical.",
-                "sensor_status": sensor_record.get("status", "UNKNOWN"),
+                "sensor_status": status,
             },
             message="SAFETY BLOCK: No evacuation alert sent.",
         )
 
+    # ✅ Only reached if explicitly critical and consistent
     st.toast(f"🚨 ACTION TRIGGERED: Dispatching units to {area_name}!")
     return _standard_tool_response(
         ok=True,
@@ -443,7 +496,7 @@ def dispatch_emergency_alert(area_name: str, action_plan: str) -> str:
 # ============================================================
 st.set_page_config(page_title="FlashGuard PH", page_icon="⛈️", layout="centered")
 st.title("⛈️ FlashGuard PH")
-st.subheader("Autonomous Crisis Management System (Hackathon Demo)")
+st.subheader("Data to Action, in seconds.. (Hackathon Demo)")
 st.caption("Hybrid mode: deterministic mock 'sensor truth' + best-effort live Open-Meteo augmentation.")
 
 # Initialize status context if not present
@@ -516,18 +569,22 @@ NON-NEGOTIABLE PROTOCOL:
 
 3) In your final response:
    - Summarize "Truth (Sensors)" and "Signal (Citizen Reports)" separately
-   - Provide a short bilingual SMS alert (English + Tagalog)
-   - If no dispatch happened, explicitly say "No alert sent" and why
-
+   - IF AND ONLY IF a dispatch occurred:
+     • Provide a short bilingual SMS alert (English + Tagalog)
+   - IF no dispatch occurred:
+     • Explicitly state "No dispatch alert sent"
+     • Clearly explain why (e.g., NORMAL sensors, suppressed false alarm)
+     • DO NOT generate or simulate any SMS alert content
+  
 Keep responses factual and concise. No hallucinations.
 """
 
     st.session_state.crisis_agent = client.chats.create(
-    #    model="gemini-2.5-flash-lite",
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
+    #    model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
-            temperature=0.0,
+            temperature=0.2,
             system_instruction=directive,
         ),
     )
@@ -573,7 +630,7 @@ if user_prompt:
     _render_status_bar()
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing risk data..."):
+        with st.spinner("Analyzing data..."):
             response = st.session_state.crisis_agent.send_message(user_prompt)
             st.markdown(response.text)
 
@@ -613,7 +670,7 @@ if user_prompt:
                     st.markdown(f"**Cloud cover:** `{sensors.get('satellite_cloud_cover')}`")
 
                 if critical:
-                    st.error("🚨 DISPATCH: Evacuation alert triggered (sensor truth is critical).")
+                    st.error("🚨 Sensor is critical.")
                 else:
                     st.success("✅ SUPPRESSED: No evacuation alert (sensor truth is normal).")
 
@@ -651,7 +708,7 @@ FlashGuard PH enforces a **fact-grounded safety gate** before sending evacuation
         if show_open_meteo:
             loc = _extract_demo_location(user_prompt)
             if loc and loc in LOCATION_COORDS:
-                st.markdown("### 🌐 Live Evidence (Open‑Meteo, best‑effort)")
+                st.markdown("### 🌐 Live Evidence (Open‑Meteo)")
                 bundle = _get_live_open_meteo_bundle(loc)
 
                 if not bundle.get("ok"):
@@ -694,7 +751,7 @@ FlashGuard PH enforces a **fact-grounded safety gate** before sending evacuation
                 st.json(st.session_state.debug_log)
 
         if show_raw:
-            with st.expander("Raw mock sensor dataset (demo only)"):
+            with st.expander("Raw mock sensor dataset (demo only - Assumption: Sensor feeds are operational and internally consistent)"):
                 st.json(MOCK_ENVIRONMENTAL_DATA)
 
     st.session_state.messages.append({"role": "assistant", "content": response.text})
