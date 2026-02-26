@@ -580,7 +580,8 @@ Keep responses factual and concise. No hallucinations.
 """
 
     st.session_state.crisis_agent = client.chats.create(
-        model="gemini-2.5-flash-lite",
+    #    model="gemini-2.5-flash-lite",
+        model="gemini-2.0-flash-lite-001",  
     #    model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             tools=[check_pagasa_water_level, check_social_media_reports, dispatch_emergency_alert],
